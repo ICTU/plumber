@@ -1,0 +1,9 @@
+package: github.com/gioren/plumber
+import:
+- package: github.com/Sirupsen/logrus
+- package: github.com/docker/libcontainer
+  subpackages:
+  - netlink
+- package: github.com/fsouza/go-dockerclient
+- package: github.com/milosgajdos83/tenus
+- package: github.com/vishvananda/netns

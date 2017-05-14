@@ -1,0 +1,12 @@
+version: '2'
+
+services:
+  net1:
+    image: ictu/pipes:dhcpcd
+    cap_add: 
+      - NET_ADMIN
+    network_mode: none
+    labels:
+      plumber.network.mode: "macvlan"
+      plumber.network.interfacename: "eth0"
+      plumber.network.vlanid: "3134"
