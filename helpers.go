@@ -3,9 +3,10 @@ package main
 import (
 	"crypto/rand"
 	"fmt"
-
 	"github.com/Sirupsen/logrus"
 	"github.com/fsouza/go-dockerclient"
+	"github.com/urfave/cli"
+	"net/url"
 )
 
 func generateMAC() string {
@@ -22,6 +23,26 @@ func generateMAC() string {
 	return mac
 }
 
+func initializeApp() *cli.App {
+	app := cli.NewApp()
+	app.Name = "plumber"
+	app.Usage = "network provisioning for docker containers"
+	app.Flags = []cli.Flag{
+		cli.StringFlag{
+			Name:   "docker-host",
+			Value:  "unix:///var/run/docker.sock",
+			Usage:  "A tcp or unix connection string",
+			EnvVar: "DOCKER_HOST",
+		},
+		cli.StringFlag{
+			Name:  "host-link",
+			Value: "eth0",
+			Usage: "The name of the host link",
+		},
+	}
+	return app
+}
+
 func initializeLogger() {
 	f := logrus.TextFormatter{
 		DisableColors:    false,
@@ -35,10 +56,9 @@ func initializeLogger() {
 	logrus.SetLevel(logrus.InfoLevel)
 }
 
-func initializeDocker() (*docker.Client, error) {
-	dPath := "unix:///var/run/docker.sock"
-	logrus.Printf("Docker client connected to: %s", dPath)
-	d, err := docker.NewClient(dPath)
+func initializeDocker(dockerHost string) (*docker.Client, error) {
+	logrus.Printf("Docker client connected to: %s", dockerHost)
+	d, err := docker.NewClient(dockerHost)
 	if err != nil {
 		return nil, err
 	}
@@ -51,4 +71,39 @@ func containerInfo(d *docker.Client, containerID string) (*docker.Container, err
 		return nil, err
 	}
 	return container, nil
+}
+
+
+// e.g. for unix scheme return /var/run/docker.sock
+// e.g. for tcp scheme return 10.19.88.49:2375
+func getDockerHostPath(d string) string {
+	var dPath string
+	myUrl, _ := url.Parse(d)
+	if myUrl.IsAbs() {
+		switch myUrl.Scheme {
+		case "unix":
+			dPath = myUrl.Path
+			break
+		case "tcp":
+			dPath = myUrl.Host
+			break
+
+		}
+	}
+	return dPath
+}
+
+func processIncomingEvents(events chan *docker.APIEvents, d *docker.Client) {
+	logrus.Println("Start listening for docker events")
+	for {
+		select {
+		case event := <-events:
+			if event.Type == "container" {
+				c := &Container{
+					ID: event.Actor.ID[0:12],
+				}
+				go c.handleContainerEvent(d, event)
+			}
+		}
+	}
 }

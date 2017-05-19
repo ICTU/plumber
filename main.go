@@ -3,37 +3,37 @@ package main
 import (
 	"github.com/Sirupsen/logrus"
 	"github.com/fsouza/go-dockerclient"
+	"github.com/urfave/cli"
 	"os"
 )
 
-var DockerSocketPath string = os.Getenv("DOCKER_SOCKET_PATH")
-var HostLinkName string = os.Getenv("HOST_LINK_NAME")
+var DockerHost string
+var HostLinkName string
 
 func main() {
-
 	initializeLogger()
 
-	d, err := initializeDocker()
-	if err != nil {
-		logrus.Fatalf("Failed initializing docker client: %s", err.Error())
-	}
+	app := initializeApp()
 
-	// Add event listener source them to events channel
-	events := make(chan *docker.APIEvents)
-	d.AddEventListener(events)
+	app.Action = func(c *cli.Context) error {
+		DockerHost = c.String("docker-host")
+		HostLinkName = c.String("host-link")
 
-	// Process incoming events
-	logrus.Println("Start listening for docker events")
-	for {
-		select {
-		case event := <-events:
-			if event.Type == "container" {
-				c := &Container{
-					ID: event.Actor.ID[0:12],
-				}
-				go c.handleContainerEvent(d, event)
-			}
+		d, err := initializeDocker(DockerHost)
+		if err != nil {
+			logrus.Fatalf("Failed initializing docker client: %s", err.Error())
 		}
+
+		// Add event listener source them to events channel
+		events := make(chan *docker.APIEvents)
+		d.AddEventListener(events)
+
+		// Process incoming events
+		processIncomingEvents(events, d)
+
+		return nil
 	}
 
+	app.Run(os.Args)
 }
+

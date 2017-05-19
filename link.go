@@ -76,7 +76,7 @@ func (c *Container) setupHostLink(linkName string, linkOptions tenus.VlanOptions
 func (c *Container) setupContainerLink(parentLink string, linkOptions tenus.MacVlanOptions, containerName string) (*MacvlanLink, error) {
 
 	//Get container PID
-	pid, err := tenus.DockerPidByName(containerName, DockerSocketPath)
+	pid, err := tenus.DockerPidByName(containerName, getDockerHostPath(DockerHost))
 	if err != nil {
 		return nil, err
 	}
