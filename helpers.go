@@ -22,6 +22,19 @@ func generateMAC() string {
 	return mac
 }
 
+func initializeLogger() {
+	f := logrus.TextFormatter{
+		DisableColors:    false,
+		DisableSorting:   true,
+		DisableTimestamp: false,
+		FullTimestamp:    true,
+		TimestampFormat:  "02-01-2006 15:04:05",
+	}
+	logrus.SetFormatter(&f)
+	// Set debug level
+	logrus.SetLevel(logrus.InfoLevel)
+}
+
 func initializeDocker() (*docker.Client, error) {
 	dPath := "unix:///var/run/docker.sock"
 	logrus.Printf("Docker client connected to: %s", dPath)

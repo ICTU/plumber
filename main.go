@@ -3,27 +3,16 @@ package main
 import (
 	"github.com/Sirupsen/logrus"
 	"github.com/fsouza/go-dockerclient"
+	"os"
 )
 
-var dPath string = "/var/run/docker.sock"
-var HostLinkName string = "eth0"
+var DockerSocketPath string = os.Getenv("DOCKER_SOCKET_PATH")
+var HostLinkName string = os.Getenv("HOST_LINK_NAME")
 
 func main() {
 
-	f := logrus.TextFormatter{
-		DisableColors: false,
-		DisableSorting: true,
-		DisableTimestamp: false,
-		FullTimestamp: true,
-		TimestampFormat: "02-01-2006 15:04:05",
-	}
+	initializeLogger()
 
-	logrus.SetFormatter(&f)
-
-	// Set debug level
-	logrus.SetLevel(logrus.InfoLevel)
-
-	//Initialize docker client
 	d, err := initializeDocker()
 	if err != nil {
 		logrus.Fatalf("Failed initializing docker client: %s", err.Error())
