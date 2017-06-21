@@ -24,12 +24,15 @@ func main() {
 
 		d, err := initializeDocker(DockerHost)
 		if err != nil {
-			logrus.Fatalf("Failed initializing docker client: %s", err.Error())
+			Logger.Fatalf("Failed initializing docker client: %s", err.Error())
 		}
 
 		// Add event listener source them to events channel
 		events := make(chan *docker.APIEvents)
 		d.AddEventListener(events)
+
+		// Process existing containers
+		go processExistingContainers(d)
 
 		// Process incoming events
 		processIncomingEvents(events, d)

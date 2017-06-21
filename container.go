@@ -12,16 +12,16 @@ import (
 
 type Container struct {
 	ID     string
+	Name   string
 	Logger *logrus.Entry
 }
 
 type ContainerNetworkConfig struct {
-	NetworkMode   string
-	VlanID        string
+	NetworkMode string
+	VlanID      string
 }
 
-func NewContainer(event *docker.APIEvents) *Container {
-	id := event.Actor.ID[0:12]
+func NewContainer(id string) *Container {
 	logEntry := Logger.WithFields(logrus.Fields{"ID": id})
 	return &Container{
 		ID:     id,
@@ -33,20 +33,20 @@ func (c *Container) getContainerNetworkConfig(containerInfo *docker.Container) C
 	// Check if pipework command is passed as environment variable.
 	pattern := regexp.MustCompile(`((\w*_)*pipework_cmd(_\w*)*=(.*))`)
 	for _, env := range containerInfo.Config.Env {
-		if  pattern.MatchString(env) {
+		if pattern.MatchString(env) {
 			pipeworkCMD := pattern.FindStringSubmatch(env)[4]
 			c.Logger.Debugf("Pipework CMD: %s", pipeworkCMD)
 			pattern = regexp.MustCompile(`^(\w*)( -i (\w*))? @CONTAINER_NAME@ (\S*)( @(\d+))?$`)
 			return ContainerNetworkConfig{
 				NetworkMode: "macvlan",
-				VlanID: pattern.FindStringSubmatch(pipeworkCMD)[6],
+				VlanID:      pattern.FindStringSubmatch(pipeworkCMD)[6],
 			}
 		}
 	}
 
 	return ContainerNetworkConfig{
-		NetworkMode:   containerInfo.Config.Labels["plumber.network.mode"],
-		VlanID:        containerInfo.Config.Labels["plumber.network.vlanid"],
+		NetworkMode: containerInfo.Config.Labels["plumber.network.mode"],
+		VlanID:      containerInfo.Config.Labels["plumber.network.vlanid"],
 	}
 }
 
@@ -88,24 +88,16 @@ func (c *Container) setupMacvlanNetwork(containerName string, cn *ContainerNetwo
 	c.Logger.Debugf("Container link info: %v", containerLink)
 }
 
-func (c *Container) handleContainerEvent(d *docker.Client, event *docker.APIEvents) {
+func (c *Container) handleContainerNetwork(d *docker.Client) {
+	containerInfo, err := containerInfo(d, c.ID)
+	if err != nil {
+		c.Logger.Errorf("Error inspecting container: %s", err.Error())
+	}
+	if containerInfo != nil {
+		cn := c.getContainerNetworkConfig(containerInfo)
 
-	containerName := event.Actor.Attributes["name"]
-	containerID := event.Actor.ID
-
-	switch event.Action {
-	case "start":
-		containerInfo, err := containerInfo(d, containerID)
-		if err != nil {
-			c.Logger.Errorf("Error inspecting container: %s", err.Error())
-		}
-		if containerInfo != nil {
-			cn := c.getContainerNetworkConfig(containerInfo)
-
-			if cn.NetworkMode != "" {
-				c.Logger.Printf("Container '%s' event -> '%s'", containerName, event.Action)
-				c.setupNetwork(containerName, &cn)
-			}
+		if cn.NetworkMode != "" {
+			c.setupNetwork(containerInfo.Name, &cn)
 		}
 	}
 }

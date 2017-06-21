@@ -74,6 +74,14 @@ func (c *Container) setupHostLink(linkName string, linkOptions tenus.VlanOptions
 
 func (c *Container) setupContainerLink(parentLink string, linkOptions tenus.MacVlanOptions, containerName string) (*MacvlanLink, error) {
 
+	// Lock OS thread to avoid switching namespaces
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	// Save current NS
+	origns, _ := netns.Get()
+	defer origns.Close()
+
 	//Get container PID
 	pid, err := tenus.DockerPidByName(containerName, getDockerHostPath(DockerHost))
 	if err != nil {
@@ -83,6 +91,24 @@ func (c *Container) setupContainerLink(parentLink string, linkOptions tenus.MacV
 
 	cIfNameTemp := fmt.Sprintf("mcv%v", pid)
 	cIfName := linkOptions.Dev
+
+	//Enter container namespace and check if link exists
+	if err = tenus.SetNetNsToPid(pid); err != nil {
+		return nil, err
+	}
+	c.Logger.Debugf("Entered container network namespace")
+
+	if _, err := net.InterfaceByName(cIfName); err == nil {
+		c.Logger.Warnf("Container link '%s' already exists. Skipping setup.", cIfName)
+		return &MacvlanLink{
+			options: linkOptions,
+			name:    linkOptions.Dev,
+		}, nil
+	}
+
+	// Switch back to the original namespace
+	netns.Set(origns)
+
 	l, err := tenus.NewMacVlanLinkWithOptions(parentLink, tenus.MacVlanOptions{
 		Dev:     cIfNameTemp,
 		MacAddr: linkOptions.MacAddr,
@@ -93,25 +119,17 @@ func (c *Container) setupContainerLink(parentLink string, linkOptions tenus.MacV
 	}
 	c.Logger.Debugf("MACVLAN link: %s", l)
 
-	// Lock OS thread to avoid switching namespaces
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
-	// Save current NS
-	origns, _ := netns.Get()
-	defer origns.Close()
-
 	//Move link into container namespace
 	if err := l.SetLinkNetNsPid(pid); err != nil {
 		return nil, err
 	}
-	c.Logger.Debugf("%s: Moved link '%s' to container", cIfNameTemp)
+	c.Logger.Debugf("Moved link '%s' to container", cIfNameTemp)
 
 	//Enter container namespace and rename link
 	if err = tenus.SetNetNsToPid(pid); err != nil {
 		return nil, err
 	}
-	c.Logger.Debugf("%s: Entered container network namespace")
+	c.Logger.Debugf("Entered container network namespace")
 	if err = netlink.NetworkChangeName(l.NetInterface(), cIfName); err != nil {
 		return nil, err
 	}

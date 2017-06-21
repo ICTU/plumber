@@ -75,7 +75,6 @@ func containerInfo(d *docker.Client, containerID string) (*docker.Container, err
 	return container, nil
 }
 
-
 // e.g. for unix scheme return /var/run/docker.sock
 // e.g. for tcp scheme return 10.19.88.49:2375
 func getDockerHostPath(d string) string {
@@ -96,14 +95,37 @@ func getDockerHostPath(d string) string {
 }
 
 func processIncomingEvents(events chan *docker.APIEvents, d *docker.Client) {
-	logrus.Println("Start listening for docker events")
+	Logger.Println("Start listening for docker events")
 	for {
 		select {
 		case event := <-events:
 			if event.Type == "container" {
-				c := NewContainer(event)
-				go c.handleContainerEvent(d, event)
+				go func(e *docker.APIEvents) {
+					c := NewContainer(e.Actor.ID[0:12])
+					c.Name = e.Actor.Attributes["name"]
+					switch e.Action {
+					case "start":
+						c.Logger.Printf("Container '%s' event -> '%s'", c.Name, e.Action)
+						c.handleContainerNetwork(d)
+					}
+				}(event)
 			}
 		}
 	}
+}
+
+func processExistingContainers(d *docker.Client) {
+	containers, err := d.ListContainers(docker.ListContainersOptions{All: true})
+	if err != nil {
+		Logger.Fatalf("Failed to get containers: %v", err)
+	}
+
+	Logger.Println("Processing existing containers")
+	for _, container := range containers {
+		if container.State == "running" {
+			c := NewContainer(container.ID[0:12])
+			c.handleContainerNetwork(d)
+		}
+	}
+	Logger.Println("All existing containers have been processed")
 }
