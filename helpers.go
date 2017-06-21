@@ -100,12 +100,12 @@ func processIncomingEvents(events chan *docker.APIEvents, d *docker.Client) {
 		select {
 		case event := <-events:
 			if event.Type == "container" {
-				go func(e *docker.APIEvents) {
-					c := NewContainer(e.Actor.ID[0:12])
-					c.Name = e.Actor.Attributes["name"]
-					switch e.Action {
+				go func(event *docker.APIEvents) {
+					c := NewContainer(event.Actor.ID[0:12])
+					c.Name = event.Actor.Attributes["name"]
+					switch event.Action {
 					case "start":
-						c.Logger.Printf("Container '%s' event -> '%s'", c.Name, e.Action)
+						c.Logger.Printf("Container '%s' event -> '%s'", c.Name, event.Action)
 						c.handleContainerNetwork(d)
 					}
 				}(event)
@@ -122,10 +122,12 @@ func processExistingContainers(d *docker.Client) {
 
 	Logger.Println("Processing existing containers")
 	for _, container := range containers {
-		if container.State == "running" {
-			c := NewContainer(container.ID[0:12])
-			c.handleContainerNetwork(d)
-		}
+		go func(container docker.APIContainers) {
+			if container.State == "running" {
+				c := NewContainer(container.ID[0:12])
+				c.handleContainerNetwork(d)
+			}
+		}(container)
 	}
 	Logger.Println("All existing containers have been processed")
 }

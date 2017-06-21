@@ -32,7 +32,7 @@ func main() {
 		d.AddEventListener(events)
 
 		// Process existing containers
-		go processExistingContainers(d)
+		processExistingContainers(d)
 
 		// Process incoming events
 		processIncomingEvents(events, d)

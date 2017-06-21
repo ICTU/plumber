@@ -99,6 +99,9 @@ func (c *Container) setupContainerLink(parentLink string, linkOptions tenus.MacV
 	c.Logger.Debugf("Entered container network namespace")
 
 	if _, err := net.InterfaceByName(cIfName); err == nil {
+		// Switch back to the original namespace
+		netns.Set(origns)
+
 		c.Logger.Warnf("Container link '%s' already exists. Skipping setup.", cIfName)
 		return &MacvlanLink{
 			options: linkOptions,
