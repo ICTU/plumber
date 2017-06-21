@@ -10,7 +10,8 @@ import (
 )
 
 type Container struct {
-	ID string
+	ID     string
+	Logger *logrus.Entry
 }
 
 type ContainerNetwork struct {
@@ -22,13 +23,31 @@ type ContainerNetwork struct {
 	MAC           string
 }
 
+func NewContainer(event *docker.APIEvents) *Container {
+	id := event.Actor.ID[0:12]
+	logEntry := Logger.WithFields(logrus.Fields{"ID": id})
+	return &Container{
+		ID:     id,
+		Logger: logEntry,
+	}
+}
+
+func getContainerNetwork(containerInfo *docker.Container) ContainerNetwork {
+	return ContainerNetwork{
+		NetworkMode:   containerInfo.Config.Labels["plumber.network.mode"],
+		VlanID:        containerInfo.Config.Labels["plumber.network.vlanid"],
+		Gateway:       containerInfo.Config.Labels["plumber.network.gateway"],
+		InterfaceName: containerInfo.Config.Labels["plumber.network.interfacename"],
+	}
+}
+
 func (c *Container) setupNetwork(containerName string, cn *ContainerNetwork) {
 	switch cn.NetworkMode {
 	case "macvlan":
-		logrus.Printf("%s: Setting up '%s' network for container '%s'", c.ID, cn.NetworkMode, containerName)
+		c.Logger.Printf("Setting up '%s' network for container '%s'", cn.NetworkMode, containerName)
 		c.setupMacvlanNetwork(containerName, cn)
 	default:
-		logrus.Printf("%s: I do not know how to setup '%s' network", c.ID, cn.NetworkMode)
+		c.Logger.Printf("I do not know how to setup '%s' network", cn.NetworkMode)
 	}
 }
 
@@ -42,9 +61,9 @@ func (c *Container) setupMacvlanNetwork(containerName string, cn *ContainerNetwo
 			Id:      uint16(vlanID),
 		})
 		if err != nil {
-			logrus.Fatalf("%s: Failed setting up parent link: %v", c.ID, err.Error())
+			c.Logger.Fatalf("Failed setting up parent link: %v", err.Error())
 		}
-		logrus.Printf("%s: Parent link online: %v", c.ID, parentLink.options.MacAddr)
+		c.Logger.Printf("Parent link online: %v", parentLink.options.MacAddr)
 		parentLinkName = parentLink.name
 	}
 
@@ -54,10 +73,10 @@ func (c *Container) setupMacvlanNetwork(containerName string, cn *ContainerNetwo
 		Mode:    "bridge",
 	}, containerName)
 	if err != nil {
-		logrus.Fatalf("%s: Failed setting up container link: %v", c.ID, err.Error())
+		c.Logger.Fatalf("Failed setting up container link: %v", err.Error())
 	}
-	logrus.Printf("%s: Container link online: %v", c.ID, containerLink.options.MacAddr)
-	logrus.Debugf("Container link info: %v", containerLink)
+	c.Logger.Printf("Container link online: %v", containerLink.options.MacAddr)
+	c.Logger.Debugf("Container link info: %v", containerLink)
 }
 
 func (c *Container) handleContainerEvent(d *docker.Client, event *docker.APIEvents) {
@@ -69,18 +88,13 @@ func (c *Container) handleContainerEvent(d *docker.Client, event *docker.APIEven
 	case "start":
 		containerInfo, err := containerInfo(d, containerID)
 		if err != nil {
-			logrus.Errorf("%s: Error inspecting container: %s", c.ID, err.Error())
+			c.Logger.Errorf("Error inspecting container: %s", err.Error())
 		}
 		if containerInfo != nil {
-			cn := ContainerNetwork{
-				NetworkMode:   containerInfo.Config.Labels["plumber.network.mode"],
-				VlanID:        containerInfo.Config.Labels["plumber.network.vlanid"],
-				Gateway:       containerInfo.Config.Labels["plumber.network.gateway"],
-				InterfaceName: containerInfo.Config.Labels["plumber.network.interfacename"],
-			}
+			cn := getContainerNetwork(containerInfo)
 
 			if cn.NetworkMode != "" {
-				logrus.Printf("%s: Container '%s' event -> '%s'", c.ID, containerName, event.Action)
+				c.Logger.Printf("Container '%s' event -> '%s'", containerName, event.Action)
 				c.setupNetwork(containerName, &cn)
 			}
 		}

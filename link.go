@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"github.com/milosgajdos83/tenus"
-	"github.com/Sirupsen/logrus"
 	"github.com/docker/libcontainer/netlink"
 	"github.com/vishvananda/netns"
 	"net"
@@ -42,13 +41,13 @@ func getVlanLink(linkName string, linkOptions tenus.VlanOptions) (*VlanLink, err
 
 func (c *Container) setupHostLink(linkName string, linkOptions tenus.VlanOptions) (*VlanLink, error) {
 
-	logrus.Debugf("%s: Checking if VLAN link '%s' exists", c.ID, linkOptions.Dev)
+	c.Logger.Debugf("Checking if VLAN link '%s' exists", linkOptions.Dev)
 	// Check if VLAN link already exists
 	if _, err := net.InterfaceByName(linkOptions.Dev); err == nil {
-		logrus.Printf("%s: VLAN link '%s' already assigned", c.ID, linkOptions.Dev)
+		c.Logger.Printf("VLAN link '%s' already assigned", linkOptions.Dev)
 		l, err := getVlanLink(linkOptions.Dev, linkOptions)
 		if err != nil {
-			logrus.Errorf("%s: Failed retrieving VLAN link: %v", c.ID, err.Error())
+			c.Logger.Errorf("Failed retrieving VLAN link: %v", err.Error())
 			return nil, err
 		}
 		return l, nil
@@ -56,15 +55,15 @@ func (c *Container) setupHostLink(linkName string, linkOptions tenus.VlanOptions
 	// Create VLAN parent interface
 	l, err := tenus.NewVlanLinkWithOptions(linkName, linkOptions)
 	if err != nil {
-		logrus.Error(err.Error())
+		c.Logger.Error(err.Error())
 	}
-	logrus.Debugf("%s: VLAN link: %s", c.ID, l)
+	c.Logger.Debugf("VLAN link: %s", l)
 	//Bring interface online
 	if err = l.SetLinkUp(); err != nil {
 		return nil, err
 	}
 
-	logrus.Debugf("%s: Brought VLAN link online: %s", c.ID, l)
+	c.Logger.Debugf("Brought VLAN link online: %s", l)
 
 	return &VlanLink{
 		link:    l,
@@ -80,7 +79,7 @@ func (c *Container) setupContainerLink(parentLink string, linkOptions tenus.MacV
 	if err != nil {
 		return nil, err
 	}
-	logrus.Debugf("%s: Container PID is: %v", c.ID, pid)
+	c.Logger.Debugf("Container PID is: %v", pid)
 
 	cIfNameTemp := fmt.Sprintf("mcv%v", pid)
 	cIfName := linkOptions.Dev
@@ -92,7 +91,7 @@ func (c *Container) setupContainerLink(parentLink string, linkOptions tenus.MacV
 	if err != nil {
 		return nil, err
 	}
-	logrus.Debugf("%s: MACVLAN link: %s", c.ID, l)
+	c.Logger.Debugf("MACVLAN link: %s", l)
 
 	// Lock OS thread to avoid switching namespaces
 	runtime.LockOSThread()
@@ -106,23 +105,23 @@ func (c *Container) setupContainerLink(parentLink string, linkOptions tenus.MacV
 	if err := l.SetLinkNetNsPid(pid); err != nil {
 		return nil, err
 	}
-	logrus.Debugf("%s: Moved link '%s' to container", c.ID, cIfNameTemp)
+	c.Logger.Debugf("%s: Moved link '%s' to container", cIfNameTemp)
 
 	//Enter container namespace and rename link
 	if err = tenus.SetNetNsToPid(pid); err != nil {
 		return nil, err
 	}
-	logrus.Debugf("%s: Entered container network namespace", c.ID)
+	c.Logger.Debugf("%s: Entered container network namespace")
 	if err = netlink.NetworkChangeName(l.NetInterface(), cIfName); err != nil {
 		return nil, err
 	}
-	logrus.Debugf("%s: Renamed link from '%s' to '%s'", c.ID, cIfNameTemp, cIfName)
+	c.Logger.Debugf("Renamed link from '%s' to '%s'",cIfNameTemp, cIfName)
 
 	//Bring macvlan interface online
 	if err = l.SetLinkUp(); err != nil {
 		return nil, err
 	}
-	logrus.Debugf("%s: Brought link online: %s", c.ID, l)
+	c.Logger.Debugf("Brought link online: %s", l)
 
 	// Switch back to the original namespace
 	netns.Set(origns)

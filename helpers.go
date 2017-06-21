@@ -44,6 +44,10 @@ func initializeApp() *cli.App {
 }
 
 func initializeLogger() {
+	// Set debug level
+	logrus.SetLevel(logrus.InfoLevel)
+
+	Logger = logrus.New()
 	f := logrus.TextFormatter{
 		DisableColors:    false,
 		DisableSorting:   true,
@@ -51,9 +55,7 @@ func initializeLogger() {
 		FullTimestamp:    true,
 		TimestampFormat:  "02-01-2006 15:04:05",
 	}
-	logrus.SetFormatter(&f)
-	// Set debug level
-	logrus.SetLevel(logrus.InfoLevel)
+	Logger.Formatter = &f
 }
 
 func initializeDocker(dockerHost string) (*docker.Client, error) {
@@ -99,9 +101,7 @@ func processIncomingEvents(events chan *docker.APIEvents, d *docker.Client) {
 		select {
 		case event := <-events:
 			if event.Type == "container" {
-				c := &Container{
-					ID: event.Actor.ID[0:12],
-				}
+				c := NewContainer(event)
 				go c.handleContainerEvent(d, event)
 			}
 		}

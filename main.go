@@ -7,8 +7,11 @@ import (
 	"os"
 )
 
-var DockerHost string
-var HostLinkName string
+var (
+	DockerHost   string
+	HostLinkName string
+	Logger       *logrus.Logger
+)
 
 func main() {
 	initializeLogger()
@@ -36,4 +39,3 @@ func main() {
 
 	app.Run(os.Args)
 }
-
