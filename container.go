@@ -7,6 +7,7 @@ import (
 	"github.com/Sirupsen/logrus"
 	"github.com/fsouza/go-dockerclient"
 	"github.com/milosgajdos83/tenus"
+	"regexp"
 )
 
 type Container struct {
@@ -14,13 +15,9 @@ type Container struct {
 	Logger *logrus.Entry
 }
 
-type ContainerNetwork struct {
+type ContainerNetworkConfig struct {
 	NetworkMode   string
 	VlanID        string
-	IP            string
-	Gateway       string
-	InterfaceName string
-	MAC           string
 }
 
 func NewContainer(event *docker.APIEvents) *Container {
@@ -32,16 +29,28 @@ func NewContainer(event *docker.APIEvents) *Container {
 	}
 }
 
-func getContainerNetwork(containerInfo *docker.Container) ContainerNetwork {
-	return ContainerNetwork{
+func (c *Container) getContainerNetworkConfig(containerInfo *docker.Container) ContainerNetworkConfig {
+	// Check if pipework command is passed as environment variable.
+	pattern := regexp.MustCompile(`((\w*_)*pipework_cmd(_\w*)*=(.*))`)
+	for _, env := range containerInfo.Config.Env {
+		if  pattern.MatchString(env) {
+			pipeworkCMD := pattern.FindStringSubmatch(env)[4]
+			c.Logger.Debugf("Pipework CMD: %s", pipeworkCMD)
+			pattern = regexp.MustCompile(`^(\w*)( -i (\w*))? @CONTAINER_NAME@ (\S*)( @(\d+))?$`)
+			return ContainerNetworkConfig{
+				NetworkMode: "macvlan",
+				VlanID: pattern.FindStringSubmatch(pipeworkCMD)[6],
+			}
+		}
+	}
+
+	return ContainerNetworkConfig{
 		NetworkMode:   containerInfo.Config.Labels["plumber.network.mode"],
 		VlanID:        containerInfo.Config.Labels["plumber.network.vlanid"],
-		Gateway:       containerInfo.Config.Labels["plumber.network.gateway"],
-		InterfaceName: containerInfo.Config.Labels["plumber.network.interfacename"],
 	}
 }
 
-func (c *Container) setupNetwork(containerName string, cn *ContainerNetwork) {
+func (c *Container) setupNetwork(containerName string, cn *ContainerNetworkConfig) {
 	switch cn.NetworkMode {
 	case "macvlan":
 		c.Logger.Printf("Setting up '%s' network for container '%s'", cn.NetworkMode, containerName)
@@ -51,7 +60,7 @@ func (c *Container) setupNetwork(containerName string, cn *ContainerNetwork) {
 	}
 }
 
-func (c *Container) setupMacvlanNetwork(containerName string, cn *ContainerNetwork) {
+func (c *Container) setupMacvlanNetwork(containerName string, cn *ContainerNetworkConfig) {
 	parentLinkName := HostLinkName
 	if cn.VlanID != "" {
 		vlanID, _ := strconv.ParseUint(cn.VlanID, 0, 64)
@@ -91,7 +100,7 @@ func (c *Container) handleContainerEvent(d *docker.Client, event *docker.APIEven
 			c.Logger.Errorf("Error inspecting container: %s", err.Error())
 		}
 		if containerInfo != nil {
-			cn := getContainerNetwork(containerInfo)
+			cn := c.getContainerNetworkConfig(containerInfo)
 
 			if cn.NetworkMode != "" {
 				c.Logger.Printf("Container '%s' event -> '%s'", containerName, event.Action)
