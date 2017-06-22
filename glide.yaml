@@ -1,4 +1,4 @@
-package: github.com/gioren/plumber
+package: github.com/ICTU/plumber
 import:
 - package: github.com/Sirupsen/logrus
 - package: github.com/docker/libcontainer
@@ -6,4 +6,6 @@ import:
   - netlink
 - package: github.com/fsouza/go-dockerclient
 - package: github.com/milosgajdos83/tenus
+  version: 104e65ade0fa42600476ac8786335b5e128797e4
+- package: github.com/urfave/cli
 - package: github.com/vishvananda/netns

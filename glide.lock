@@ -1,5 +1,5 @@
-hash: afe21b909a51855831a7c4da71b3dce33020d76d2c83eb55ea1b654a419e69e2
-updated: 2017-05-13T19:42:43.912027549+02:00
+hash: badd54772136722d72d369edddef5b483a774d80556ab0609786030391099aa9
+updated: 2017-06-22T10:31:07.112387101+02:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: fa152c58bc15761d0200cb75fe958b89a9d4888e
@@ -50,7 +50,7 @@ imports:
 - name: github.com/docker/go-units
   version: 0dadbb0345b35ec7ef35e228dabb8de89a65bf52
 - name: github.com/docker/libcontainer
-  version: 83a102cc68a09d890cce3b6c2e5c14c49e6373a0
+  version: 5dc7ba0f24332273461e45bc49edcb4d5aa6c44c
   subpackages:
   - netlink
   - system
@@ -78,7 +78,9 @@ imports:
 - name: github.com/pkg/errors
   version: c605e284fe17294bda444b34710735b29d1a9d90
 - name: github.com/Sirupsen/logrus
-  version: 62f94013e5862ca79b0622b72f2442457ed1de31
+  version: 202f25545ea4cf9b191ff7f846df5d87c9382c2b
+- name: github.com/urfave/cli
+  version: 0bdeddeeb0f650497d603c4ad7b20cfe685682f6
 - name: github.com/vishvananda/netns
   version: 54f0e4339ce73702a0607f49922aaa1e749b418d
 - name: golang.org/x/net
