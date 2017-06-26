@@ -19,7 +19,6 @@ func generateMAC() string {
 	// Set the local bit
 	buf[0] = (buf[0] | 2) & 0xfe
 	mac := fmt.Sprintf("%02x:%02x:%02x:%02x:%02x:%02x", buf[0], buf[1], buf[2], buf[3], buf[4], buf[5])
-	logrus.Debugf("Generated MAC: %v", mac)
 	return mac
 }
 
@@ -27,6 +26,7 @@ func initializeApp() *cli.App {
 	app := cli.NewApp()
 	app.Name = "plumber"
 	app.Usage = "network provisioning for docker containers"
+	app.Version = version
 	app.Flags = []cli.Flag{
 		cli.StringFlag{
 			Name:   "docker-host",
@@ -44,10 +44,8 @@ func initializeApp() *cli.App {
 }
 
 func initializeLogger() {
-	// Set debug level
-	logrus.SetLevel(logrus.InfoLevel)
-
 	Logger = logrus.New()
+	Logger.Level = logrus.InfoLevel
 	f := logrus.TextFormatter{
 		DisableColors:    false,
 		DisableSorting:   true,
@@ -59,7 +57,7 @@ func initializeLogger() {
 }
 
 func initializeDocker(dockerHost string) (*docker.Client, error) {
-	logrus.Printf("Docker client connected to: %s", dockerHost)
+	Logger.Printf("Docker client connected to: %s", dockerHost)
 	d, err := docker.NewClient(dockerHost)
 	if err != nil {
 		return nil, err
@@ -99,8 +97,8 @@ func processIncomingEvents(events chan *docker.APIEvents, d *docker.Client) {
 	for {
 		select {
 		case event := <-events:
-			if event.Type == "container" {
-				go func(event *docker.APIEvents) {
+			go func(event *docker.APIEvents) {
+				if event.Type == "container" {
 					c := NewContainer(event.Actor.ID[0:12])
 					c.Name = event.Actor.Attributes["name"]
 					switch event.Action {
@@ -108,8 +106,8 @@ func processIncomingEvents(events chan *docker.APIEvents, d *docker.Client) {
 						c.Logger.Printf("Container '%s' event -> '%s'", c.Name, event.Action)
 						c.handleContainerNetwork(d)
 					}
-				}(event)
-			}
+				}
+			}(event)
 		}
 	}
 }

@@ -1,5 +1,5 @@
-hash: badd54772136722d72d369edddef5b483a774d80556ab0609786030391099aa9
-updated: 2017-06-22T10:31:07.112387101+02:00
+hash: c7443ed1475a8ce09163384cd8a3699c7d6159f341bbc9239d5ca899b492dced
+updated: 2017-06-26T15:19:18.813975768+02:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: fa152c58bc15761d0200cb75fe958b89a9d4888e
@@ -39,6 +39,7 @@ imports:
   - pkg/mount
   - pkg/pools
   - pkg/promise
+  - pkg/reexec
   - pkg/stdcopy
   - pkg/system
   - pkg/term

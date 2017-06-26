@@ -1,6 +1,9 @@
 package: github.com/ICTU/plumber
 import:
 - package: github.com/Sirupsen/logrus
+- package: github.com/docker/docker
+  subpackages:
+  - pkg/reexec
 - package: github.com/docker/libcontainer
   subpackages:
   - netlink

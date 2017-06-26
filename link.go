@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"github.com/milosgajdos83/tenus"
 	"github.com/docker/libcontainer/netlink"
+	"github.com/docker/docker/pkg/reexec"
 	"github.com/vishvananda/netns"
-	"net"
 	"runtime"
+	"net"
+	"os"
+	"os/exec"
 )
 
 type VlanLink struct {
@@ -28,15 +31,14 @@ func getVlanLink(linkName string, linkOptions tenus.VlanOptions) (*VlanLink, err
 	}
 
 	return &VlanLink{
-		name:    linkName,
+		name: linkName,
 		options: tenus.VlanOptions{
 			MacAddr: v.NetInterface().HardwareAddr.String(),
-			Dev: linkOptions.Dev,
-			Id: linkOptions.Id,
+			Dev:     linkOptions.Dev,
+			Id:      linkOptions.Id,
 		},
-		link:    v,
+		link: v,
 	}, nil
-
 }
 
 func (c *Container) setupHostLink(linkName string, linkOptions tenus.VlanOptions) (*VlanLink, error) {
@@ -72,20 +74,44 @@ func (c *Container) setupHostLink(linkName string, linkOptions tenus.VlanOptions
 	}, nil
 }
 
-func (c *Container) setupContainerLink(parentLink string, linkOptions tenus.MacVlanOptions, containerName string) (*MacvlanLink, error) {
+func init() {
+	reexec.Register("setup-container-link", reexecSetupContainerLink)
+	if reexec.Init() {
+		os.Exit(0)
+	}
+}
+
+func reexecSetupContainerLink() {
+	containerName := os.Args[1]
+	containerID := os.Args[2]
+	parentLink := os.Args[3]
+	dockerHost := os.Args[4]
+	linkOptions := &tenus.MacVlanOptions{
+		Mode:    "bridge",
+		MacAddr: os.Args[5],
+		Dev:     os.Args[6],
+	}
+
+	initializeLogger()
+	c:= NewContainer(containerID)
 
 	// Lock OS thread to avoid switching namespaces
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
 	// Save current NS
-	origns, _ := netns.Get()
+	origns, err := netns.Get()
+	if err != nil {
+		c.Logger.Fatalf("Error saving current NS: %s", err.Error())
+		os.Exit(1)
+	}
 	defer origns.Close()
 
 	//Get container PID
-	pid, err := tenus.DockerPidByName(containerName, getDockerHostPath(DockerHost))
+	pid, err := tenus.DockerPidByName(containerName, getDockerHostPath(dockerHost))
 	if err != nil {
-		return nil, err
+		c.Logger.Fatalf("Error getting container PID: %s", err.Error())
+		os.Exit(1)
 	}
 	c.Logger.Debugf("Container PID is: %v", pid)
 
@@ -94,19 +120,22 @@ func (c *Container) setupContainerLink(parentLink string, linkOptions tenus.MacV
 
 	//Enter container namespace and check if link exists
 	if err = tenus.SetNetNsToPid(pid); err != nil {
-		return nil, err
+		c.Logger.Fatalf("Error entering container namespace: %s", err.Error())
+		os.Exit(1)
 	}
-	c.Logger.Debugf("Entered container network namespace")
+	ns, err := netns.Get()
+	if err != nil {
+		c.Logger.Fatalf("Error getting container namespace: %s", err.Error())
+		os.Exit(1)
+	}
+	c.Logger.Debugf("Entered container network namespace: %v", ns)
 
 	if _, err := net.InterfaceByName(cIfName); err == nil {
 		// Switch back to the original namespace
 		netns.Set(origns)
 
 		c.Logger.Warnf("Container link '%s' already exists. Skipping setup.", cIfName)
-		return &MacvlanLink{
-			options: linkOptions,
-			name:    linkOptions.Dev,
-		}, nil
+		os.Exit(0)
 	}
 
 	// Switch back to the original namespace
@@ -118,38 +147,64 @@ func (c *Container) setupContainerLink(parentLink string, linkOptions tenus.MacV
 		Mode:    linkOptions.Mode,
 	})
 	if err != nil {
-		return nil, err
+		c.Logger.Fatalf("Error creating macvlan link: %s", err.Error())
+		os.Exit(1)
 	}
 	c.Logger.Debugf("MACVLAN link: %s", l)
 
 	//Move link into container namespace
 	if err := l.SetLinkNetNsPid(pid); err != nil {
-		return nil, err
+		c.Logger.Fatalf("Error moving link to container namespace: %s", err.Error())
+		os.Exit(1)
 	}
 	c.Logger.Debugf("Moved link '%s' to container", cIfNameTemp)
 
 	//Enter container namespace and rename link
 	if err = tenus.SetNetNsToPid(pid); err != nil {
-		return nil, err
+		c.Logger.Fatalf("Error entering container namespace: %s", err.Error())
+		os.Exit(1)
 	}
-	c.Logger.Debugf("Entered container network namespace")
+	ns, err = netns.Get()
+	if err != nil {
+		c.Logger.Fatalf("Error getting container namespace: %s", err.Error())
+		os.Exit(1)
+	}
+	c.Logger.Debugf("Entered container network namespace: %v", ns)
 	if err = netlink.NetworkChangeName(l.NetInterface(), cIfName); err != nil {
-		return nil, err
+		c.Logger.Fatalf("Error changing interface name: %s", err.Error())
+		os.Exit(1)
 	}
-	c.Logger.Debugf("Renamed link from '%s' to '%s'",cIfNameTemp, cIfName)
+	c.Logger.Debugf("Renamed link from '%s' to '%s'", cIfNameTemp, cIfName)
 
 	//Bring macvlan interface online
 	if err = l.SetLinkUp(); err != nil {
-		return nil, err
+		c.Logger.Fatalf("Error bringing up macvlan interface: %s", err.Error())
+		os.Exit(1)
 	}
 	c.Logger.Debugf("Brought link online: %s", l)
 
 	// Switch back to the original namespace
 	netns.Set(origns)
 
+	os.Exit(0)
+}
+
+func (c *Container) setupContainerLink(parentLink string, linkOptions tenus.MacVlanOptions, containerName string) (*MacvlanLink, error) {
+
+	cmd := &exec.Cmd{
+		Path:   reexec.Self(),
+		Args:   append([]string{"setup-container-link"}, containerName, c.ID, parentLink, DockerHost, linkOptions.MacAddr, linkOptions.Dev),
+		Stdout: os.Stdout,
+		Stderr: os.Stderr,
+	}
+
+	if err := cmd.Run(); err != nil {
+		c.Logger.Fatalf("Setup container link reexec command failed. Command - %s\n", err)
+	}
+
 	return &MacvlanLink{
 		options: linkOptions,
 		name:    linkOptions.Dev,
-		link:    l,
 	}, nil
+
 }

@@ -72,7 +72,7 @@ func (c *Container) setupMacvlanNetwork(containerName string, cn *ContainerNetwo
 		if err != nil {
 			c.Logger.Fatalf("Failed setting up parent link: %v", err.Error())
 		}
-		c.Logger.Printf("Parent link online: %v", parentLink.options.MacAddr)
+		c.Logger.Printf("Parent link '%v' online: %v", parentLink.options.Dev, parentLink.options.MacAddr)
 		parentLinkName = parentLink.name
 	}
 
@@ -85,7 +85,6 @@ func (c *Container) setupMacvlanNetwork(containerName string, cn *ContainerNetwo
 		c.Logger.Fatalf("Failed setting up container link: %v", err.Error())
 	}
 	c.Logger.Printf("Container link online: %v", containerLink.options.MacAddr)
-	c.Logger.Debugf("Container link info: %v", containerLink)
 }
 
 func (c *Container) handleContainerNetwork(d *docker.Client) {

@@ -11,6 +11,7 @@ var (
 	DockerHost   string
 	HostLinkName string
 	Logger       *logrus.Logger
+	version      string
 )
 
 func main() {
