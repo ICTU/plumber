@@ -18,7 +18,6 @@ deployment:
       - docker build --no-cache --build-arg APP_VERSION=$CIRCLE_TAG -t build-output -f Dockerfile.builder .
       - docker create --name extract build-output
       - docker cp extract:/go/src/github.com/ICTU/plumber/plumber ./plumber
-      - docker rm -f extract
       - docker build -f Dockerfile.app -t ictu/plumber . -f Dockerfile.app
       - docker tag ictu/plumber ictu/plumber:${CIRCLE_TAG}
       - docker tag ictu/plumber ictu/plumber:${MAJOR_VERSION}
